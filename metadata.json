@@ -1,0 +1,6 @@
+{
+  "name": "Absensi QR SMPT Bina 45",
+  "description": "Sistem absensi berbasis QR Code untuk siswa dengan dashboard guru real-time.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
