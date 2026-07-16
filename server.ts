@@ -6,8 +6,8 @@ import 'dotenv/config';
 import path from 'path';
 import express from 'express';
 import { createServer as createViteServer } from 'vite';
-import { createApp } from './src/server/app.ts';
-import * as store from './src/server/store.ts';
+import { createApp } from './src/server/app';
+import * as store from './src/server/store';
 
 const PORT = 3000;
 

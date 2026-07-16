@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronLeft, GraduationCap, Plus, Trash2, Loader2, BookOpen, ShieldAlert } from 'lucide-react';
-import { useAuth } from '../../context/AuthContext';
+import { safeJson, useAuth } from '../../context/AuthContext';
 import type { Teacher } from '../../types';
 
 const emptyForm = { name: '', subject: '', username: '', password: '' };
@@ -38,7 +38,7 @@ export default function ManageTeachers() {
         method: 'POST',
         body: JSON.stringify(form),
       });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (!res.ok) throw new Error(data.error || 'Gagal menambah guru');
       setForm(emptyForm);
       await load();

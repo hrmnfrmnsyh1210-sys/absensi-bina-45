@@ -6,7 +6,7 @@
  * Variabel environment (APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, SESSION_SECRET,
  * ADMIN_USERNAME, ADMIN_PASSWORD) diambil dari Environment Variables Vercel.
  */
-import { createApp } from '../src/server/app.ts';
+import { createApp } from '../src/server/app';
 
 const app = createApp();
 

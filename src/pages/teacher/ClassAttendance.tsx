@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import { ChevronLeft, CheckCircle2, Circle, RefreshCw, CheckCircle, ShieldAlert } from 'lucide-react';
-import { useAuth } from '../../context/AuthContext';
+import { safeJson, useAuth } from '../../context/AuthContext';
 import type { RosterResponse } from '../../types';
 
 type Toast = { type: 'success' | 'error'; title: string; sub?: string };
@@ -40,7 +40,7 @@ export default function ClassAttendance() {
           method: 'POST',
           body: JSON.stringify({ studentId }),
         });
-        const data = await res.json();
+        const data = await safeJson(res);
         if (res.ok) {
           setToast({ type: 'success', title: 'Hadir', sub: `${data.student.name} • Kelas ${data.student.class}` });
         } else {

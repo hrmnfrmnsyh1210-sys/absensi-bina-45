@@ -14,6 +14,20 @@ interface AuthContextValue extends AuthState {
 
 const STORAGE_KEY = 'absensi.auth';
 
+/**
+ * Parse body respons sebagai JSON. Bila server membalas non-JSON (mis. halaman
+ * error dari host seperti "A server error has occurred"), kembalikan objek
+ * error yang rapi alih-alih melempar SyntaxError.
+ */
+export async function safeJson(res: Response): Promise<any> {
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { error: `Server bermasalah (HTTP ${res.status}). Coba beberapa saat lagi.` };
+  }
+}
+
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 function loadState(): AuthState {
@@ -42,7 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),
       });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (!res.ok) throw new Error(data.error || 'Login gagal');
       persist({ token: data.token, user: data.user });
       return data.user as SessionUser;

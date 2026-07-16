@@ -5,8 +5,8 @@
  *  - api/[...path].ts (Vercel: diekspor sebagai serverless function)
  */
 import express from 'express';
-import { login, requireAuth, type AuthedRequest } from './auth.ts';
-import * as store from './store.ts';
+import { login, requireAuth, type AuthedRequest } from './auth';
+import * as store from './store';
 
 export function createApp() {
   const app = express();
