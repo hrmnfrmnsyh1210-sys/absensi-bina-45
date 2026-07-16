@@ -7,15 +7,16 @@
  */
 import crypto from 'node:crypto';
 import type { NextFunction, Request, Response } from 'express';
-import { findTeacherByUsername, verifyPassword } from './store.js';
+import { findParentByUsername, findTeacherByUsername, verifyPassword } from './store.js';
 
-export type Role = 'admin' | 'teacher';
+export type Role = 'admin' | 'teacher' | 'parent';
 
 export interface SessionUser {
   role: Role;
   id: string;
   name: string;
-  subject?: string;
+  subject?: string; // guru
+  studentId?: string; // orang tua: id anaknya
 }
 
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
@@ -62,7 +63,13 @@ export function verifyToken(token: string): SessionUser | null {
   try {
     const payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf-8')) as TokenPayload;
     if (!payload.exp || Date.now() > payload.exp) return null;
-    return { role: payload.role, id: payload.id, name: payload.name, subject: payload.subject };
+    return {
+      role: payload.role,
+      id: payload.id,
+      name: payload.name,
+      subject: payload.subject,
+      studentId: payload.studentId,
+    };
   } catch {
     return null;
   }
@@ -77,6 +84,11 @@ export function login(username: string, password: string): { token: string; user
     const teacher = findTeacherByUsername(username);
     if (teacher && verifyPassword(password, teacher.passwordHash)) {
       user = { role: 'teacher', id: teacher.id, name: teacher.name, subject: teacher.subject };
+    } else {
+      const parent = findParentByUsername(username);
+      if (parent && verifyPassword(password, parent.passwordHash)) {
+        user = { role: 'parent', id: parent.id, name: parent.name, studentId: parent.studentId };
+      }
     }
   }
 
@@ -88,7 +100,8 @@ export interface AuthedRequest extends Request {
   user?: SessionUser;
 }
 
-export function requireAuth(role?: Role) {
+export function requireAuth(role?: Role | Role[]) {
+  const allowed = role ? (Array.isArray(role) ? role : [role]) : null;
   return (req: AuthedRequest, res: Response, next: NextFunction) => {
     const header = req.headers.authorization;
     const token = header && header.startsWith('Bearer ') ? header.slice(7) : null;
@@ -96,7 +109,7 @@ export function requireAuth(role?: Role) {
     if (!user) {
       return res.status(401).json({ error: 'Tidak terautentikasi' });
     }
-    if (role && user.role !== role) {
+    if (allowed && !allowed.includes(user.role)) {
       return res.status(403).json({ error: 'Tidak diizinkan' });
     }
     req.user = user;

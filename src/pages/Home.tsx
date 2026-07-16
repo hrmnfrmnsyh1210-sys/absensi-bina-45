@@ -37,8 +37,8 @@ export default function Home() {
               <LogIn className="w-7 h-7" />
             </div>
             <div>
-              <h2 className="font-bold text-slate-800 text-lg">Login Guru / Admin</h2>
-              <p className="text-sm text-slate-500 font-medium">Scan absensi & kelola data</p>
+              <h2 className="font-bold text-slate-800 text-lg">Login Guru / Admin / Ortu</h2>
+              <p className="text-sm text-slate-500 font-medium">Scan absensi, kelola data & rekap</p>
             </div>
           </Link>
         </div>

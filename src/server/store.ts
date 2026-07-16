@@ -23,6 +23,20 @@ export interface Teacher {
 
 export type PublicTeacher = Omit<Teacher, 'passwordHash'>;
 
+export interface Parent {
+  id: string;
+  username: string;
+  passwordHash: string;
+  name: string;
+  studentId: string;
+}
+
+// Untuk daftar di UI admin: identitas ortu + info anaknya.
+export interface PublicParent extends Omit<Parent, 'passwordHash'> {
+  studentName: string;
+  studentClass: string;
+}
+
 export interface Attendance {
   id: string;
   date: string; // YYYY-MM-DD
@@ -37,7 +51,9 @@ export interface Attendance {
 }
 
 const STUDENT_HEADERS = ['id', 'nis', 'name', 'class'];
+const CLASS_HEADERS = ['name'];
 const TEACHER_HEADERS = ['id', 'username', 'passwordHash', 'name', 'subject'];
+const PARENT_HEADERS = ['id', 'username', 'passwordHash', 'name', 'studentId'];
 const ATT_HEADERS = [
   'id', 'date', 'time', 'studentId', 'studentName', 'class',
   'subject', 'teacherId', 'teacherName', 'status',
@@ -55,7 +71,9 @@ const SAMPLE_STUDENTS: Student[] = [
 ];
 
 let students: Student[] = [];
+let classes: string[] = []; // daftar kelas eksplisit (boleh kosong tanpa siswa)
 let teachers: Teacher[] = [];
+let parents: Parent[] = [];
 let attendance: Attendance[] = [];
 
 export function isPersistent(): boolean {
@@ -78,14 +96,18 @@ export function ensureStore(): Promise<void> {
 export async function initStore(): Promise<void> {
   if (!sheets.sheetsEnabled) {
     students = [...SAMPLE_STUDENTS];
+    classes = [...new Set(SAMPLE_STUDENTS.map((s) => s.class))];
     teachers = [];
+    parents = [];
     attendance = [];
     return;
   }
 
   await sheets.initSheets([
     { name: 'Students', headers: STUDENT_HEADERS },
+    { name: 'Classes', headers: CLASS_HEADERS },
     { name: 'Teachers', headers: TEACHER_HEADERS },
+    { name: 'Parents', headers: PARENT_HEADERS },
     { name: 'Attendance', headers: ATT_HEADERS },
   ]);
 
@@ -101,11 +123,31 @@ export async function initStore(): Promise<void> {
     students = [...SAMPLE_STUDENTS];
   }
 
+  classes = (await sheets.getRows('Classes'))
+    .filter((r) => r[0])
+    .map((r) => r[0]);
+
+  // Migrasi: bila sheet Classes masih kosong, isi dari kelas para siswa.
+  if (classes.length === 0) {
+    const derived = [...new Set(students.map((s) => s.class).filter(Boolean))];
+    for (const name of derived) {
+      await sheets.appendRow('Classes', [name]);
+    }
+    classes = derived;
+  }
+
   teachers = (await sheets.getRows('Teachers'))
     .filter((r) => r[0])
     .map((r) => ({
       id: r[0], username: r[1] ?? '', passwordHash: r[2] ?? '',
       name: r[3] ?? '', subject: r[4] ?? '',
+    }));
+
+  parents = (await sheets.getRows('Parents'))
+    .filter((r) => r[0])
+    .map((r) => ({
+      id: r[0], username: r[1] ?? '', passwordHash: r[2] ?? '',
+      name: r[3] ?? '', studentId: r[4] ?? '',
     }));
 
   attendance = (await sheets.getRows('Attendance'))
@@ -153,8 +195,98 @@ export function listStudents(cls?: string): Student[] {
   return [...list].sort((a, b) => a.name.localeCompare(b.name));
 }
 
+function findStudentByNis(nis: string, excludeId?: string): Student | undefined {
+  return students.find((s) => s.nis === nis && s.id !== excludeId);
+}
+
+export async function addStudent(input: {
+  nis: string;
+  name: string;
+  class: string;
+}): Promise<Student> {
+  const nis = input.nis.trim();
+  if (nis && findStudentByNis(nis)) throw new Error('NIS_EXISTS');
+
+  const student: Student = {
+    id: randomId('S'),
+    nis,
+    name: input.name.trim(),
+    class: input.class.trim(),
+  };
+  students.push(student);
+  if (sheets.sheetsEnabled) {
+    await sheets.appendRow('Students', [student.id, student.nis, student.name, student.class]);
+  }
+  return student;
+}
+
+export async function updateStudent(
+  id: string,
+  input: { nis: string; name: string; class: string },
+): Promise<Student> {
+  const student = students.find((s) => s.id === id);
+  if (!student) throw new Error('STUDENT_NOT_FOUND');
+  const nis = input.nis.trim();
+  if (nis && findStudentByNis(nis, id)) throw new Error('NIS_EXISTS');
+
+  student.nis = nis;
+  student.name = input.name.trim();
+  student.class = input.class.trim();
+
+  if (sheets.sheetsEnabled) {
+    const row = [student.id, student.nis, student.name, student.class];
+    try {
+      await sheets.updateRowByMatch('Students', 0, id, row);
+    } catch (err) {
+      // Apps Script lama belum punya aksi updateRowByMatch: fallback hapus+tulis.
+      console.error('updateRowByMatch gagal, fallback ke delete+append:', err);
+      await sheets.deleteRowByMatch('Students', 0, id);
+      await sheets.appendRow('Students', row);
+    }
+  }
+  return student;
+}
+
+export async function deleteStudent(id: string): Promise<boolean> {
+  const idx = students.findIndex((s) => s.id === id);
+  if (idx === -1) return false;
+  students.splice(idx, 1);
+  if (sheets.sheetsEnabled) {
+    await sheets.deleteRowByMatch('Students', 0, id);
+  }
+  return true;
+}
+
+// ---------- classes ----------
+
 export function listClasses(): string[] {
-  return [...new Set(students.map((s) => s.class))].sort();
+  // Gabungan kelas eksplisit + kelas yang tercantum pada data siswa.
+  const all = new Set([...classes, ...students.map((s) => s.class).filter(Boolean)]);
+  return [...all].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+}
+
+export async function addClass(name: string): Promise<string> {
+  const cls = name.trim();
+  if (!cls) throw new Error('CLASS_NAME_REQUIRED');
+  if (listClasses().some((c) => c.toLowerCase() === cls.toLowerCase())) {
+    throw new Error('CLASS_EXISTS');
+  }
+  classes.push(cls);
+  if (sheets.sheetsEnabled) {
+    await sheets.appendRow('Classes', [cls]);
+  }
+  return cls;
+}
+
+export async function deleteClass(name: string): Promise<boolean> {
+  if (students.some((s) => s.class === name)) throw new Error('CLASS_HAS_STUDENTS');
+  const idx = classes.indexOf(name);
+  if (idx === -1) return false;
+  classes.splice(idx, 1);
+  if (sheets.sheetsEnabled) {
+    await sheets.deleteRowByMatch('Classes', 0, name);
+  }
+  return true;
 }
 
 // ---------- teachers ----------
@@ -171,13 +303,18 @@ export function findTeacherById(id: string): Teacher | undefined {
   return teachers.find((t) => t.id === id);
 }
 
+// Username harus unik lintas guru & orang tua agar login tidak ambigu.
+function usernameTaken(username: string): boolean {
+  return Boolean(findTeacherByUsername(username) || findParentByUsername(username));
+}
+
 export async function addTeacher(input: {
   username: string;
   password: string;
   name: string;
   subject: string;
 }): Promise<PublicTeacher> {
-  if (findTeacherByUsername(input.username)) {
+  if (usernameTaken(input.username)) {
     throw new Error('USERNAME_EXISTS');
   }
   const teacher: Teacher = {
@@ -203,6 +340,66 @@ export async function deleteTeacher(id: string): Promise<boolean> {
   teachers.splice(idx, 1);
   if (sheets.sheetsEnabled) {
     await sheets.deleteRowByMatch('Teachers', 0, id);
+  }
+  return true;
+}
+
+// ---------- parents ----------
+
+export function findParentByUsername(username: string): Parent | undefined {
+  return parents.find((p) => p.username.toLowerCase() === username.toLowerCase());
+}
+
+export function getStudentById(id: string): Student | undefined {
+  return students.find((s) => s.id === id);
+}
+
+export function listParents(): PublicParent[] {
+  return parents.map(({ passwordHash: _ph, ...rest }) => {
+    const student = getStudentById(rest.studentId);
+    return {
+      ...rest,
+      studentName: student?.name ?? '(siswa terhapus)',
+      studentClass: student?.class ?? '-',
+    };
+  });
+}
+
+export async function addParent(input: {
+  username: string;
+  password: string;
+  name: string;
+  studentId: string;
+}): Promise<PublicParent> {
+  if (usernameTaken(input.username)) {
+    throw new Error('USERNAME_EXISTS');
+  }
+  const student = getStudentById(input.studentId);
+  if (!student) throw new Error('STUDENT_NOT_FOUND');
+
+  const parent: Parent = {
+    id: randomId('P'),
+    username: input.username.trim(),
+    passwordHash: hashPassword(input.password),
+    name: input.name.trim(),
+    studentId: input.studentId,
+  };
+  parents.push(parent);
+  if (sheets.sheetsEnabled) {
+    await sheets.appendRow('Parents', [
+      parent.id, parent.username, parent.passwordHash, parent.name, parent.studentId,
+    ]);
+  }
+  const { passwordHash: _ph, ...pub } = parent;
+  return { ...pub, studentName: student.name, studentClass: student.class };
+}
+
+export async function deleteParent(id: string): Promise<boolean> {
+  const idx = parents.findIndex((p) => p.id === id);
+  if (idx === -1) return false;
+  parents.splice(idx, 1);
+  if (sheets.sheetsEnabled) {
+    await sheets.deleteRowByMatch('Parents', 0, id);
   }
   return true;
 }
@@ -287,4 +484,26 @@ export function getRecordsByDate(date = todayStr()): Attendance[] {
   return attendance
     .filter((a) => a.date === date)
     .sort((a, b) => b.time.localeCompare(a.time));
+}
+
+export interface RecordFilter {
+  from?: string; // YYYY-MM-DD inklusif
+  to?: string; // YYYY-MM-DD inklusif
+  class?: string;
+  subject?: string;
+  studentId?: string;
+}
+
+/** Ambil catatan absensi dengan filter opsional, terbaru lebih dulu. */
+export function getRecords(filter: RecordFilter = {}): Attendance[] {
+  return attendance
+    .filter((a) => {
+      if (filter.from && a.date < filter.from) return false;
+      if (filter.to && a.date > filter.to) return false;
+      if (filter.class && a.class !== filter.class) return false;
+      if (filter.subject && a.subject !== filter.subject) return false;
+      if (filter.studentId && a.studentId !== filter.studentId) return false;
+      return true;
+    })
+    .sort((a, b) => b.date.localeCompare(a.date) || b.time.localeCompare(a.time));
 }

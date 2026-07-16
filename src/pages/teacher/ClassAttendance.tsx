@@ -1,11 +1,30 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Html5QrcodeScanner } from 'html5-qrcode';
-import { ChevronLeft, CheckCircle2, Circle, RefreshCw, CheckCircle, ShieldAlert } from 'lucide-react';
+import { Html5Qrcode } from 'html5-qrcode';
+import { ChevronLeft, CheckCircle2, Circle, RefreshCw, CheckCircle, ShieldAlert, Loader2, CameraOff } from 'lucide-react';
 import { safeJson, useAuth } from '../../context/AuthContext';
 import type { RosterResponse } from '../../types';
 
 type Toast = { type: 'success' | 'error'; title: string; sub?: string };
+type CamStatus = 'starting' | 'on' | 'error';
+
+function cameraErrorMessage(err: unknown): string {
+  const msg = String((err as Error)?.message ?? err ?? '');
+  const name = (err as DOMException)?.name ?? '';
+  if (name === 'NotAllowedError' || /permission/i.test(msg)) {
+    return 'Izin kamera ditolak. Buka pengaturan situs di browser lalu izinkan akses kamera.';
+  }
+  if (name === 'NotFoundError' || /no.*camera|not.*found/i.test(msg)) {
+    return 'Kamera tidak ditemukan di perangkat ini.';
+  }
+  if (name === 'NotReadableError' || /in use|could not start/i.test(msg)) {
+    return 'Kamera sedang dipakai aplikasi lain. Tutup aplikasi tersebut lalu coba lagi.';
+  }
+  if (typeof window !== 'undefined' && !window.isSecureContext) {
+    return 'Kamera hanya bisa diakses lewat HTTPS (atau localhost). Buka halaman ini lewat alamat https.';
+  }
+  return `Gagal menyalakan kamera. ${msg}`.trim();
+}
 
 export default function ClassAttendance() {
   const { user, apiFetch } = useAuth();
@@ -14,8 +33,11 @@ export default function ClassAttendance() {
 
   const [roster, setRoster] = useState<RosterResponse | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
+  const [camStatus, setCamStatus] = useState<CamStatus>('starting');
+  const [camError, setCamError] = useState('');
+  const [camAttempt, setCamAttempt] = useState(0);
 
-  const scannerRef = useRef<Html5QrcodeScanner | null>(null);
+  const scannerRef = useRef<Html5Qrcode | null>(null);
   const processingRef = useRef(false);
   // Ref ke handler terbaru agar callback scanner (dibuat sekali) selalu fresh.
   const submitRef = useRef<(studentId: string, fromScan: boolean) => void>(() => {});
@@ -33,7 +55,13 @@ export default function ClassAttendance() {
     async (studentId: string, fromScan: boolean) => {
       if (processingRef.current) return;
       processingRef.current = true;
-      if (fromScan) scannerRef.current?.pause(true);
+      if (fromScan) {
+        try {
+          scannerRef.current?.pause(true);
+        } catch {
+          // scanner belum/berhenti berjalan; abaikan
+        }
+      }
 
       try {
         const res = await apiFetch('/api/attendance', {
@@ -53,7 +81,13 @@ export default function ClassAttendance() {
         setTimeout(() => {
           processingRef.current = false;
           setToast(null);
-          if (fromScan) scannerRef.current?.resume();
+          if (fromScan) {
+            try {
+              scannerRef.current?.resume();
+            } catch {
+              // scanner sudah dibongkar; abaikan
+            }
+          }
         }, 1800);
       }
     },
@@ -71,22 +105,58 @@ export default function ClassAttendance() {
     return () => clearInterval(interval);
   }, [loadRoster]);
 
-  // Inisialisasi kamera scanner sekali.
+  // Nyalakan kamera langsung (tanpa UI bawaan html5-qrcode).
+  // Aman terhadap double-mount StrictMode: cleanup menunggu start() selesai
+  // sebelum menghentikan kamera, agar mount kedua tidak bentrok.
   useEffect(() => {
-    const scanner = new Html5QrcodeScanner(
-      'qr-reader',
-      { fps: 10, qrbox: { width: 220, height: 220 }, rememberLastUsedCamera: true },
-      false,
-    );
+    let cancelled = false;
+    const scanner = new Html5Qrcode('qr-reader');
     scannerRef.current = scanner;
-    scanner.render(
-      (decodedText) => submitRef.current(decodedText, true),
-      () => {},
-    );
+    setCamStatus('starting');
+    setCamError('');
+
+    const startPromise = scanner
+      .start(
+        { facingMode: 'environment' },
+        {
+          fps: 10,
+          // Kotak scan mengikuti ukuran viewfinder agar tidak error di layar kecil.
+          qrbox: (w, h) => {
+            const size = Math.max(120, Math.floor(Math.min(w, h) * 0.7));
+            return { width: size, height: size };
+          },
+        },
+        (decodedText) => submitRef.current(decodedText, true),
+        () => {},
+      )
+      .then(() => {
+        if (!cancelled) setCamStatus('on');
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setCamStatus('error');
+          setCamError(cameraErrorMessage(err));
+        }
+      });
+
     return () => {
-      scanner.clear().catch(() => {});
+      cancelled = true;
+      startPromise.finally(() => {
+        if (scanner.isScanning) {
+          scanner
+            .stop()
+            .then(() => scanner.clear())
+            .catch(() => {});
+        } else {
+          try {
+            scanner.clear();
+          } catch {
+            // elemen sudah dibongkar; abaikan
+          }
+        }
+      });
     };
-  }, []);
+  }, [camAttempt]);
 
   const present = roster?.present ?? 0;
   const total = roster?.total ?? 0;
@@ -117,8 +187,26 @@ export default function ClassAttendance() {
 
       <main className="max-w-md mx-auto px-4 py-4 space-y-5">
         {/* Kamera scanner */}
-        <div className="bg-black rounded-2xl overflow-hidden relative shadow-md">
-          <div id="qr-reader" className="w-full [&_img]:hidden [&>div]:border-none" />
+        <div className="bg-black rounded-2xl overflow-hidden relative shadow-md min-h-65">
+          <div id="qr-reader" className="w-full [&_video]:w-full [&_video]:block" />
+          {camStatus === 'starting' && (
+            <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 text-slate-300">
+              <Loader2 className="w-8 h-8 animate-spin" />
+              <p className="text-sm font-semibold">Menyalakan kamera…</p>
+            </div>
+          )}
+          {camStatus === 'error' && (
+            <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 p-6 text-center">
+              <CameraOff className="w-10 h-10 text-rose-400" />
+              <p className="text-sm font-semibold text-slate-200">{camError}</p>
+              <button
+                onClick={() => setCamAttempt((n) => n + 1)}
+                className="mt-1 bg-emerald-600 text-white text-sm font-bold px-5 py-2.5 rounded-xl hover:bg-emerald-700 active:scale-95 transition-all"
+              >
+                Coba Lagi
+              </button>
+            </div>
+          )}
           {toast && (
             <div className="absolute inset-0 z-30 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center">
               {toast.type === 'success' ? (

@@ -39,11 +39,21 @@ export interface RosterResponse {
   entries: RosterEntry[];
 }
 
-export type Role = 'admin' | 'teacher';
+export interface Parent {
+  id: string;
+  username: string;
+  name: string;
+  studentId: string;
+  studentName: string;
+  studentClass: string;
+}
+
+export type Role = 'admin' | 'teacher' | 'parent';
 
 export interface SessionUser {
   role: Role;
   id: string;
   name: string;
   subject?: string;
+  studentId?: string;
 }

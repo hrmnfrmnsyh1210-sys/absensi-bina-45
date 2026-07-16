@@ -17,7 +17,8 @@ export default function Login() {
     setLoading(true);
     try {
       const user = await login(username.trim(), password);
-      navigate(user.role === 'admin' ? '/admin' : '/teacher', { replace: true });
+      const home = { admin: '/admin', teacher: '/teacher', parent: '/parent' } as const;
+      navigate(home[user.role] ?? '/', { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login gagal');
     } finally {
@@ -41,7 +42,7 @@ export default function Login() {
               <LogIn className="w-8 h-8" />
             </div>
             <h2 className="text-2xl font-black text-slate-800 tracking-tight">Masuk Akun</h2>
-            <p className="text-slate-500 font-medium text-sm mt-1">Guru atau Administrator</p>
+            <p className="text-slate-500 font-medium text-sm mt-1">Guru, Administrator, atau Orang Tua</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">

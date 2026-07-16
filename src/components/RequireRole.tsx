@@ -13,7 +13,8 @@ export default function RequireRole({ role, children }: { role: Role; children: 
   }
   if (user.role !== role) {
     // Sudah login tapi role salah → arahkan ke beranda role-nya.
-    return <Navigate to={user.role === 'admin' ? '/admin' : '/teacher'} replace />;
+    const home: Record<Role, string> = { admin: '/admin', teacher: '/teacher', parent: '/parent' };
+    return <Navigate to={home[user.role] ?? '/'} replace />;
   }
   return <>{children}</>;
 }

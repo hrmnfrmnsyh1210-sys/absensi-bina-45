@@ -58,8 +58,92 @@ export function createApp() {
     res.json(store.listStudents(cls));
   });
 
+  api.post('/students', requireAuth('admin'), async (req, res) => {
+    const { nis, name, class: cls } = req.body ?? {};
+    if (!name || !cls) {
+      return res.status(400).json({ error: 'Nama dan kelas wajib diisi' });
+    }
+    try {
+      const student = await store.addStudent({
+        nis: String(nis ?? ''),
+        name: String(name),
+        class: String(cls),
+      });
+      res.status(201).json(student);
+    } catch (err) {
+      if (err instanceof Error && err.message === 'NIS_EXISTS') {
+        return res.status(409).json({ error: 'NIS sudah dipakai siswa lain' });
+      }
+      console.error(err);
+      res.status(500).json({ error: 'Gagal menambah siswa' });
+    }
+  });
+
+  api.put('/students/:id', requireAuth('admin'), async (req, res) => {
+    const { nis, name, class: cls } = req.body ?? {};
+    if (!name || !cls) {
+      return res.status(400).json({ error: 'Nama dan kelas wajib diisi' });
+    }
+    try {
+      const student = await store.updateStudent(req.params.id, {
+        nis: String(nis ?? ''),
+        name: String(name),
+        class: String(cls),
+      });
+      res.json(student);
+    } catch (err) {
+      if (err instanceof Error && err.message === 'STUDENT_NOT_FOUND') {
+        return res.status(404).json({ error: 'Siswa tidak ditemukan' });
+      }
+      if (err instanceof Error && err.message === 'NIS_EXISTS') {
+        return res.status(409).json({ error: 'NIS sudah dipakai siswa lain' });
+      }
+      console.error(err);
+      res.status(500).json({ error: 'Gagal memperbarui siswa' });
+    }
+  });
+
+  api.delete('/students/:id', requireAuth('admin'), async (req, res) => {
+    const ok = await store.deleteStudent(req.params.id);
+    if (!ok) return res.status(404).json({ error: 'Siswa tidak ditemukan' });
+    res.json({ ok: true });
+  });
+
+  // ---------------- Classes ----------------
+
   api.get('/classes', (_req, res) => {
     res.json(store.listClasses());
+  });
+
+  api.post('/classes', requireAuth('admin'), async (req, res) => {
+    const { name } = req.body ?? {};
+    if (!name || !String(name).trim()) {
+      return res.status(400).json({ error: 'Nama kelas wajib diisi' });
+    }
+    try {
+      const cls = await store.addClass(String(name));
+      res.status(201).json({ name: cls });
+    } catch (err) {
+      if (err instanceof Error && err.message === 'CLASS_EXISTS') {
+        return res.status(409).json({ error: 'Kelas sudah ada' });
+      }
+      console.error(err);
+      res.status(500).json({ error: 'Gagal menambah kelas' });
+    }
+  });
+
+  api.delete('/classes/:name', requireAuth('admin'), async (req, res) => {
+    try {
+      const ok = await store.deleteClass(req.params.name);
+      if (!ok) return res.status(404).json({ error: 'Kelas tidak ditemukan' });
+      res.json({ ok: true });
+    } catch (err) {
+      if (err instanceof Error && err.message === 'CLASS_HAS_STUDENTS') {
+        return res.status(409).json({ error: 'Kelas masih punya siswa. Pindahkan atau hapus siswanya dulu.' });
+      }
+      console.error(err);
+      res.status(500).json({ error: 'Gagal menghapus kelas' });
+    }
   });
 
   // ---------------- Teachers (admin) ----------------
@@ -93,6 +177,43 @@ export function createApp() {
   api.delete('/teachers/:id', requireAuth('admin'), async (req, res) => {
     const ok = await store.deleteTeacher(req.params.id);
     if (!ok) return res.status(404).json({ error: 'Guru tidak ditemukan' });
+    res.json({ ok: true });
+  });
+
+  // ---------------- Parents (admin) ----------------
+
+  api.get('/parents', requireAuth('admin'), (_req, res) => {
+    res.json(store.listParents());
+  });
+
+  api.post('/parents', requireAuth('admin'), async (req, res) => {
+    const { username, password, name, studentId } = req.body ?? {};
+    if (!username || !password || !name || !studentId) {
+      return res.status(400).json({ error: 'Nama, username, password, dan siswa wajib diisi' });
+    }
+    try {
+      const parent = await store.addParent({
+        username: String(username),
+        password: String(password),
+        name: String(name),
+        studentId: String(studentId),
+      });
+      res.status(201).json(parent);
+    } catch (err) {
+      if (err instanceof Error && err.message === 'USERNAME_EXISTS') {
+        return res.status(409).json({ error: 'Username sudah dipakai' });
+      }
+      if (err instanceof Error && err.message === 'STUDENT_NOT_FOUND') {
+        return res.status(404).json({ error: 'Siswa tidak ditemukan' });
+      }
+      console.error(err);
+      res.status(500).json({ error: 'Gagal menambah akun orang tua' });
+    }
+  });
+
+  api.delete('/parents/:id', requireAuth('admin'), async (req, res) => {
+    const ok = await store.deleteParent(req.params.id);
+    if (!ok) return res.status(404).json({ error: 'Akun orang tua tidak ditemukan' });
     res.json({ ok: true });
   });
 
@@ -135,6 +256,36 @@ export function createApp() {
   // Rekap hari ini untuk admin (semua mapel).
   api.get('/attendance/today', requireAuth('admin'), (_req, res) => {
     res.json(store.getRecordsByDate());
+  });
+
+  // Rekap rentang tanggal. Guru dipaksa hanya melihat mapelnya sendiri;
+  // admin bebas memfilter kelas/mapel apa pun.
+  api.get('/attendance/recap', requireAuth(['teacher', 'admin']), (req: AuthedRequest, res) => {
+    const user = req.user!;
+    const q = req.query;
+    const filter = {
+      from: q.from ? String(q.from) : undefined,
+      to: q.to ? String(q.to) : undefined,
+      class: q.class ? String(q.class) : undefined,
+      subject: user.role === 'teacher' ? (user.subject ?? '') : q.subject ? String(q.subject) : undefined,
+    };
+    res.json(store.getRecords(filter));
+  });
+
+  // Orang tua: rekap absensi anaknya sendiri (per mapel dihitung di klien).
+  api.get('/attendance/child', requireAuth('parent'), (req: AuthedRequest, res) => {
+    const user = req.user!;
+    const student = user.studentId ? store.getStudentById(user.studentId) : undefined;
+    if (!student) {
+      return res.status(404).json({ error: 'Data siswa tidak ditemukan. Hubungi admin sekolah.' });
+    }
+    const q = req.query;
+    const records = store.getRecords({
+      studentId: student.id,
+      from: q.from ? String(q.from) : undefined,
+      to: q.to ? String(q.to) : undefined,
+    });
+    res.json({ student, records });
   });
 
   app.use('/api', api);

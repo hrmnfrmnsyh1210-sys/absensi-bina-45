@@ -22,6 +22,7 @@ interface ScriptResponse {
   rows?: string[][];
   deleted?: boolean;
   duplicate?: boolean;
+  updated?: boolean;
 }
 
 async function callScript(action: string, payload: Record<string, unknown>): Promise<ScriptResponse> {
@@ -92,4 +93,20 @@ export async function deleteRowByMatch(
 ): Promise<boolean> {
   const data = await callScript('deleteRowByMatch', { tab, matchCol, matchValue });
   return Boolean(data.deleted);
+}
+
+/**
+ * Timpa seluruh isi baris pertama yang kolom `matchCol`-nya (0-based) sama
+ * dengan `matchValue`. Mengembalikan true bila ada baris yang diperbarui.
+ * Catatan: butuh Apps Script versi terbaru (aksi updateRowByMatch); pemanggil
+ * sebaiknya menyediakan fallback delete+append untuk deployment lama.
+ */
+export async function updateRowByMatch(
+  tab: string,
+  matchCol: number,
+  matchValue: string,
+  values: (string | number)[],
+): Promise<boolean> {
+  const data = await callScript('updateRowByMatch', { tab, matchCol, matchValue, values });
+  return Boolean(data.updated);
 }

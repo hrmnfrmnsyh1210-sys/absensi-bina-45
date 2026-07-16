@@ -40,6 +40,8 @@ function doPost(e) {
         return json(handleAppendUnique(body.tab, body.values, body.keyCols));
       case 'deleteRowByMatch':
         return json(handleDelete(body.tab, body.matchCol, body.matchValue));
+      case 'updateRowByMatch':
+        return json(handleUpdate(body.tab, body.matchCol, body.matchValue, body.values));
       default:
         return json({ ok: false, error: 'aksi tidak dikenal: ' + body.action });
     }
@@ -149,6 +151,29 @@ function handleDelete(tabName, matchCol, matchValue) {
       }
     }
     return { ok: true, deleted: false };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// Timpa baris pertama yang kolom matchCol (0-based) == matchValue dengan values.
+function handleUpdate(tabName, matchCol, matchValue, values) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var sheet = ss().getSheetByName(tabName);
+    if (!sheet) return { ok: true, updated: false };
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 2) return { ok: true, updated: false };
+    var col = Number(matchCol) + 1; // 1-based
+    var colValues = sheet.getRange(2, col, lastRow - 1, 1).getValues();
+    for (var i = 0; i < colValues.length; i++) {
+      if (String(colValues[i][0]) === String(matchValue)) {
+        sheet.getRange(i + 2, 1, 1, values.length).setValues([values]);
+        return { ok: true, updated: true };
+      }
+    }
+    return { ok: true, updated: false };
   } finally {
     lock.releaseLock();
   }

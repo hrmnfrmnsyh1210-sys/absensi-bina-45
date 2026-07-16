@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { BookOpen, ChevronRight, LogOut, School, Loader2 } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { BookOpen, ChevronRight, LogOut, School, Loader2, ClipboardList } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 export default function SelectClass() {
@@ -51,6 +51,20 @@ export default function SelectClass() {
             <h2 className="text-xl font-black">{user?.subject}</h2>
           </div>
         </div>
+
+        <Link
+          to="/teacher/recap"
+          className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200 flex items-center gap-3 hover:border-emerald-400 hover:bg-emerald-50 active:scale-[0.98] transition-all mb-6"
+        >
+          <div className="w-11 h-11 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center flex-shrink-0">
+            <ClipboardList className="w-6 h-6" />
+          </div>
+          <div className="flex-1">
+            <h2 className="font-bold text-slate-800 leading-tight">Rekap Absensi</h2>
+            <p className="text-xs text-slate-500 font-medium">Laporan per kelas • Excel & PDF</p>
+          </div>
+          <ChevronRight className="w-5 h-5 text-slate-300" />
+        </Link>
 
         <h3 className="font-bold text-slate-800 mb-3 px-1 flex items-center gap-2">
           <School className="w-5 h-5 text-slate-400" /> Pilih Kelas untuk Absensi
