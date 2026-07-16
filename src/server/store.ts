@@ -60,14 +60,14 @@ const ATT_HEADERS = [
 ];
 
 const SAMPLE_STUDENTS: Student[] = [
-  { id: 'S001', nis: '2024001', name: 'Ahmad Fauzi', class: '7A' },
-  { id: 'S002', nis: '2024002', name: 'Budi Santoso', class: '7A' },
-  { id: 'S003', nis: '2024003', name: 'Citra Kirana', class: '7B' },
-  { id: 'S004', nis: '2024004', name: 'Dewi Lestari', class: '7B' },
-  { id: 'S005', nis: '2024005', name: 'Eko Prasetyo', class: '8A' },
-  { id: 'S006', nis: '2024006', name: 'Fitriani', class: '8A' },
-  { id: 'S007', nis: '2024007', name: 'Gilang Ramadhan', class: '9A' },
-  { id: 'S008', nis: '2024008', name: 'Haniifah', class: '9A' },
+  { id: 'S001', nis: '2024001', name: 'Ahmad Fauzi', class: '7' },
+  { id: 'S002', nis: '2024002', name: 'Budi Santoso', class: '7' },
+  { id: 'S003', nis: '2024003', name: 'Citra Kirana', class: '7' },
+  { id: 'S004', nis: '2024004', name: 'Dewi Lestari', class: '7' },
+  { id: 'S005', nis: '2024005', name: 'Eko Prasetyo', class: '8' },
+  { id: 'S006', nis: '2024006', name: 'Fitriani', class: '8' },
+  { id: 'S007', nis: '2024007', name: 'Gilang Ramadhan', class: '8' },
+  { id: 'S008', nis: '2024008', name: 'Haniifah', class: '8' },
 ];
 
 let students: Student[] = [];
@@ -111,24 +111,20 @@ export async function initStore(): Promise<void> {
     { name: 'Attendance', headers: ATT_HEADERS },
   ]);
 
+  // Catatan: sheet TIDAK di-seed dengan data contoh — data real diisi lewat
+  // halaman admin (Kelola Kelas & Siswa). Data contoh hanya untuk mode dev
+  // tanpa Sheets (in-memory) di atas.
   students = (await sheets.getRows('Students'))
     .filter((r) => r[0])
     .map((r) => ({ id: r[0], nis: r[1] ?? '', name: r[2] ?? '', class: r[3] ?? '' }));
-
-  // Bila sheet siswa masih kosong, isi dengan data contoh agar app bisa dipakai.
-  if (students.length === 0) {
-    for (const s of SAMPLE_STUDENTS) {
-      await sheets.appendRow('Students', [s.id, s.nis, s.name, s.class]);
-    }
-    students = [...SAMPLE_STUDENTS];
-  }
 
   classes = (await sheets.getRows('Classes'))
     .filter((r) => r[0])
     .map((r) => r[0]);
 
-  // Migrasi: bila sheet Classes masih kosong, isi dari kelas para siswa.
-  if (classes.length === 0) {
+  // Migrasi: bila sheet Classes masih kosong tapi sudah ada siswa,
+  // isi daftar kelas dari kelas para siswa.
+  if (classes.length === 0 && students.length > 0) {
     const derived = [...new Set(students.map((s) => s.class).filter(Boolean))];
     for (const name of derived) {
       await sheets.appendRow('Classes', [name]);
@@ -153,13 +149,24 @@ export async function initStore(): Promise<void> {
   attendance = (await sheets.getRows('Attendance'))
     .filter((r) => r[0])
     .map((r) => ({
-      id: r[0], date: r[1] ?? '', time: r[2] ?? '', studentId: r[3] ?? '',
+      id: r[0], date: normalizeDateStr(r[1] ?? ''), time: r[2] ?? '', studentId: r[3] ?? '',
       studentName: r[4] ?? '', class: r[5] ?? '', subject: r[6] ?? '',
       teacherId: r[7] ?? '', teacherName: r[8] ?? '', status: r[9] ?? 'Hadir',
     }));
 }
 
 // ---------- util ----------
+
+/**
+ * Normalkan tanggal ke YYYY-MM-DD. Google Sheets bisa mengubah teks tanggal
+ * menjadi sel Date yang ter-string-kan sebagai "Thu Jul 16 2026 ..." — tanpa
+ * normalisasi, filter tanggal dan cek duplikat absen tidak cocok.
+ */
+function normalizeDateStr(s: string): string {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? s : d.toLocaleDateString('en-CA');
+}
 
 function todayStr(): string {
   return new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD lokal

@@ -55,6 +55,8 @@ function ss() {
 }
 
 // Buat tab bila belum ada + tulis header bila kosong.
+// Seluruh kolom diformat sebagai teks ('@') agar Sheets TIDAK mengubah nilai
+// seperti "2026-07-16" menjadi sel Date (yang merusak filter tanggal & dedup).
 function handleInit(tabs) {
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);
@@ -65,11 +67,24 @@ function handleInit(tabs) {
       if (sheet.getLastRow() === 0 && tab.headers && tab.headers.length) {
         sheet.getRange(1, 1, 1, tab.headers.length).setValues([tab.headers]);
       }
+      sheet
+        .getRange(1, 1, sheet.getMaxRows(), sheet.getMaxColumns())
+        .setNumberFormat('@');
     });
     return { ok: true };
   } finally {
     lock.releaseLock();
   }
+}
+
+// String-kan isi sel; sel Date lama (sebelum format teks) dinormalkan ke
+// yyyy-MM-dd agar cocok dengan format tanggal aplikasi.
+function cellToString(cell) {
+  if (cell === null || cell === undefined) return '';
+  if (Object.prototype.toString.call(cell) === '[object Date]') {
+    return Utilities.formatDate(cell, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  }
+  return String(cell);
 }
 
 // Ambil baris data (tanpa header) sebagai string.
@@ -81,9 +96,7 @@ function handleGetRows(tabName) {
   if (lastRow < 2 || lastCol < 1) return { ok: true, rows: [] };
   var values = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
   var rows = values.map(function (row) {
-    return row.map(function (cell) {
-      return cell === null || cell === undefined ? '' : String(cell);
-    });
+    return row.map(cellToString);
   });
   return { ok: true, rows: rows };
 }
@@ -118,7 +131,7 @@ function handleAppendUnique(tabName, values, keyCols) {
         var match = true;
         for (var k = 0; k < keyCols.length; k++) {
           var c = keyCols[k];
-          if (String(data[i][c]) !== String(values[c])) {
+          if (cellToString(data[i][c]) !== String(values[c])) {
             match = false;
             break;
           }
