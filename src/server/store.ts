@@ -4,7 +4,7 @@
  * roster) dilayani dari cache agar cepat dan hemat kuota API.
  */
 import crypto from 'node:crypto';
-import * as sheets from './sheets';
+import * as sheets from './sheets.js';
 
 export interface Student {
   id: string;

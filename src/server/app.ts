@@ -2,11 +2,15 @@
  * Membuat aplikasi Express (rute API) tanpa memanggil listen dan tanpa Vite.
  * Dipakai bersama oleh:
  *  - server.ts (dev lokal: + Vite middleware + listen)
- *  - api/[...path].ts (Vercel: diekspor sebagai serverless function)
+ *  - api/index.ts (Vercel: diekspor sebagai serverless function)
+ *
+ * Rute didefinisikan pada Router tanpa prefix, lalu di-mount di '/api' DAN '/'.
+ * Dengan begitu handler tetap cocok baik ketika platform meneruskan path asli
+ * ("/api/auth/login") maupun path hasil rewrite tanpa prefix ("/auth/login").
  */
 import express from 'express';
-import { login, requireAuth, type AuthedRequest } from './auth';
-import * as store from './store';
+import { login, requireAuth, type AuthedRequest } from './auth.js';
+import * as store from './store.js';
 
 export function createApp() {
   const app = express();
@@ -24,9 +28,11 @@ export function createApp() {
     }
   });
 
+  const api = express.Router();
+
   // ---------------- Auth ----------------
 
-  app.post('/api/auth/login', (req, res) => {
+  api.post('/auth/login', (req, res) => {
     const { username, password } = req.body ?? {};
     if (!username || !password) {
       return res.status(400).json({ error: 'Username dan password wajib diisi' });
@@ -39,30 +45,30 @@ export function createApp() {
   });
 
   // Token stateless: logout cukup dibuang di sisi klien.
-  app.post('/api/auth/logout', (_req, res) => res.json({ ok: true }));
+  api.post('/auth/logout', (_req, res) => res.json({ ok: true }));
 
-  app.get('/api/auth/me', requireAuth(), (req: AuthedRequest, res) => {
+  api.get('/auth/me', requireAuth(), (req: AuthedRequest, res) => {
     res.json({ user: req.user });
   });
 
   // ---------------- Students ----------------
 
-  app.get('/api/students', (req, res) => {
+  api.get('/students', (req, res) => {
     const cls = req.query.class ? String(req.query.class) : undefined;
     res.json(store.listStudents(cls));
   });
 
-  app.get('/api/classes', (_req, res) => {
+  api.get('/classes', (_req, res) => {
     res.json(store.listClasses());
   });
 
   // ---------------- Teachers (admin) ----------------
 
-  app.get('/api/teachers', requireAuth('admin'), (_req, res) => {
+  api.get('/teachers', requireAuth('admin'), (_req, res) => {
     res.json(store.listTeachers());
   });
 
-  app.post('/api/teachers', requireAuth('admin'), async (req, res) => {
+  api.post('/teachers', requireAuth('admin'), async (req, res) => {
     const { username, password, name, subject } = req.body ?? {};
     if (!username || !password || !name || !subject) {
       return res.status(400).json({ error: 'Username, password, nama, dan mata pelajaran wajib diisi' });
@@ -84,7 +90,7 @@ export function createApp() {
     }
   });
 
-  app.delete('/api/teachers/:id', requireAuth('admin'), async (req, res) => {
+  api.delete('/teachers/:id', requireAuth('admin'), async (req, res) => {
     const ok = await store.deleteTeacher(req.params.id);
     if (!ok) return res.status(404).json({ error: 'Guru tidak ditemukan' });
     res.json({ ok: true });
@@ -93,7 +99,7 @@ export function createApp() {
   // ---------------- Attendance ----------------
 
   // Guru merekam absensi untuk mata pelajarannya sendiri.
-  app.post('/api/attendance', requireAuth('teacher'), async (req: AuthedRequest, res) => {
+  api.post('/attendance', requireAuth('teacher'), async (req: AuthedRequest, res) => {
     const { studentId } = req.body ?? {};
     if (!studentId) return res.status(400).json({ error: 'studentId wajib diisi' });
 
@@ -117,7 +123,7 @@ export function createApp() {
   });
 
   // Roster kelas untuk mapel guru: siapa sudah/belum absen hari ini.
-  app.get('/api/attendance/roster', requireAuth('teacher'), (req: AuthedRequest, res) => {
+  api.get('/attendance/roster', requireAuth('teacher'), (req: AuthedRequest, res) => {
     const cls = req.query.class ? String(req.query.class) : '';
     if (!cls) return res.status(400).json({ error: 'Parameter class wajib diisi' });
     const teacher = req.user!;
@@ -127,9 +133,12 @@ export function createApp() {
   });
 
   // Rekap hari ini untuk admin (semua mapel).
-  app.get('/api/attendance/today', requireAuth('admin'), (_req, res) => {
+  api.get('/attendance/today', requireAuth('admin'), (_req, res) => {
     res.json(store.getRecordsByDate());
   });
+
+  app.use('/api', api);
+  app.use('/', api);
 
   return app;
 }

@@ -7,7 +7,7 @@
  */
 import crypto from 'node:crypto';
 import type { NextFunction, Request, Response } from 'express';
-import { findTeacherByUsername, verifyPassword } from './store';
+import { findTeacherByUsername, verifyPassword } from './store.js';
 
 export type Role = 'admin' | 'teacher';
 
