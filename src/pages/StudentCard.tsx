@@ -11,7 +11,7 @@ export default function StudentCard() {
   useEffect(() => {
     fetch('/api/students')
       .then(res => res.json())
-      .then(data => setStudents(data))
+      .then(data => setStudents(Array.isArray(data) ? data : []))
       .catch(err => console.error(err));
   }, []);
 

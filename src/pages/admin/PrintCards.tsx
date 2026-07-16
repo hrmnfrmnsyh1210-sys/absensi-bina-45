@@ -19,8 +19,10 @@ export default function PrintCards() {
         apiFetch('/api/students'),
         apiFetch('/api/classes'),
       ]);
-      setStudents(await resStudents.json());
-      setClasses(await resClasses.json());
+      const dataStudents = await resStudents.json();
+      const dataClasses = await resClasses.json();
+      setStudents(Array.isArray(dataStudents) ? dataStudents : []);
+      setClasses(Array.isArray(dataClasses) ? dataClasses : []);
     } catch {
       // abaikan
     } finally {
