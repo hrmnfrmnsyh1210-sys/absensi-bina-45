@@ -8,6 +8,7 @@ interface AuthState {
 
 interface AuthContextValue extends AuthState {
   login: (username: string, password: string) => Promise<SessionUser>;
+  parentLogin: (parentName: string, studentName: string) => Promise<SessionUser>;
   logout: () => void;
   apiFetch: (input: string, init?: RequestInit) => Promise<Response>;
 }
@@ -64,6 +65,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [persist],
   );
 
+  // Login orang tua tanpa akun: cukup nama orang tua + nama siswa.
+  const parentLogin = useCallback(
+    async (parentName: string, studentName: string): Promise<SessionUser> => {
+      const res = await fetch('/api/auth/parent-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ parentName, studentName }),
+      });
+      const data = await safeJson(res);
+      if (!res.ok) throw new Error(data.error || 'Login gagal');
+      persist({ token: data.token, user: data.user });
+      return data.user as SessionUser;
+    },
+    [persist],
+  );
+
   const logout = useCallback(() => {
     const token = state.token;
     if (token) {
@@ -88,8 +105,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo<AuthContextValue>(
-    () => ({ ...state, login, logout, apiFetch }),
-    [state, login, logout, apiFetch],
+    () => ({ ...state, login, parentLogin, logout, apiFetch }),
+    [state, login, parentLogin, logout, apiFetch],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

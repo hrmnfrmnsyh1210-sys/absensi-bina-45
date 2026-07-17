@@ -7,7 +7,7 @@
  */
 import crypto from 'node:crypto';
 import type { NextFunction, Request, Response } from 'express';
-import { findParentByUsername, findTeacherByUsername, verifyPassword } from './store.js';
+import { findStudentByParentLogin, findTeacherByUsername, verifyPassword } from './store.js';
 
 export type Role = 'admin' | 'teacher' | 'parent';
 
@@ -84,15 +84,29 @@ export function login(username: string, password: string): { token: string; user
     const teacher = findTeacherByUsername(username);
     if (teacher && verifyPassword(password, teacher.passwordHash)) {
       user = { role: 'teacher', id: teacher.id, name: teacher.name, subject: teacher.subject };
-    } else {
-      const parent = findParentByUsername(username);
-      if (parent && verifyPassword(password, parent.passwordHash)) {
-        user = { role: 'parent', id: parent.id, name: parent.name, studentId: parent.studentId };
-      }
     }
   }
 
   if (!user) return null;
+  return { token: signToken(user), user };
+}
+
+/**
+ * Login orang tua tanpa akun: cukup nama orang tua + nama anaknya.
+ * Cocok bila keduanya sesuai dengan data siswa yang diisi admin.
+ */
+export function parentLogin(
+  parentName: string,
+  studentName: string,
+): { token: string; user: SessionUser } | null {
+  const student = findStudentByParentLogin(parentName, studentName);
+  if (!student) return null;
+  const user: SessionUser = {
+    role: 'parent',
+    id: `parent-${student.id}`,
+    name: student.parentName, // pakai penulisan nama sesuai data admin
+    studentId: student.id,
+  };
   return { token: signToken(user), user };
 }
 

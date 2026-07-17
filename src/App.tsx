@@ -15,7 +15,6 @@ import AdminDashboard from './pages/admin/Dashboard';
 import ManageTeachers from './pages/admin/Teachers';
 import ManageClasses from './pages/admin/Classes';
 import ManageStudents from './pages/admin/Students';
-import ManageParents from './pages/admin/Parents';
 import AdminRecap from './pages/admin/Recap';
 import PrintCards from './pages/admin/PrintCards';
 import ChildRecap from './pages/parent/ChildRecap';
@@ -95,14 +94,6 @@ export default function App() {
             element={
               <RequireRole role="admin">
                 <ManageStudents />
-              </RequireRole>
-            }
-          />
-          <Route
-            path="/admin/parents"
-            element={
-              <RequireRole role="admin">
-                <ManageParents />
               </RequireRole>
             }
           />

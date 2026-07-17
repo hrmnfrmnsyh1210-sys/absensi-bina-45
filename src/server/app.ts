@@ -9,7 +9,7 @@
  * ("/api/auth/login") maupun path hasil rewrite tanpa prefix ("/auth/login").
  */
 import express from 'express';
-import { login, requireAuth, type AuthedRequest } from './auth.js';
+import { login, parentLogin, requireAuth, type AuthedRequest } from './auth.js';
 import * as store from './store.js';
 
 export function createApp() {
@@ -44,6 +44,21 @@ export function createApp() {
     res.json({ token: result.token, user: result.user });
   });
 
+  // Login orang tua tanpa akun: cukup nama orang tua + nama siswa.
+  api.post('/auth/parent-login', (req, res) => {
+    const { parentName, studentName } = req.body ?? {};
+    if (!parentName || !studentName) {
+      return res.status(400).json({ error: 'Nama orang tua dan nama siswa wajib diisi' });
+    }
+    const result = parentLogin(String(parentName), String(studentName));
+    if (!result) {
+      return res.status(401).json({
+        error: 'Data tidak cocok. Pastikan nama orang tua dan nama siswa sesuai dengan data sekolah.',
+      });
+    }
+    res.json({ token: result.token, user: result.user });
+  });
+
   // Token stateless: logout cukup dibuang di sisi klien.
   api.post('/auth/logout', (_req, res) => res.json({ ok: true }));
 
@@ -59,7 +74,7 @@ export function createApp() {
   });
 
   api.post('/students', requireAuth('admin'), async (req, res) => {
-    const { nis, name, class: cls } = req.body ?? {};
+    const { nis, name, class: cls, parentName } = req.body ?? {};
     if (!name || !cls) {
       return res.status(400).json({ error: 'Nama dan kelas wajib diisi' });
     }
@@ -68,6 +83,7 @@ export function createApp() {
         nis: String(nis ?? ''),
         name: String(name),
         class: String(cls),
+        parentName: String(parentName ?? ''),
       });
       res.status(201).json(student);
     } catch (err) {
@@ -80,7 +96,7 @@ export function createApp() {
   });
 
   api.put('/students/:id', requireAuth('admin'), async (req, res) => {
-    const { nis, name, class: cls } = req.body ?? {};
+    const { nis, name, class: cls, parentName } = req.body ?? {};
     if (!name || !cls) {
       return res.status(400).json({ error: 'Nama dan kelas wajib diisi' });
     }
@@ -89,6 +105,7 @@ export function createApp() {
         nis: String(nis ?? ''),
         name: String(name),
         class: String(cls),
+        parentName: String(parentName ?? ''),
       });
       res.json(student);
     } catch (err) {
@@ -177,43 +194,6 @@ export function createApp() {
   api.delete('/teachers/:id', requireAuth('admin'), async (req, res) => {
     const ok = await store.deleteTeacher(req.params.id);
     if (!ok) return res.status(404).json({ error: 'Guru tidak ditemukan' });
-    res.json({ ok: true });
-  });
-
-  // ---------------- Parents (admin) ----------------
-
-  api.get('/parents', requireAuth('admin'), (_req, res) => {
-    res.json(store.listParents());
-  });
-
-  api.post('/parents', requireAuth('admin'), async (req, res) => {
-    const { username, password, name, studentId } = req.body ?? {};
-    if (!username || !password || !name || !studentId) {
-      return res.status(400).json({ error: 'Nama, username, password, dan siswa wajib diisi' });
-    }
-    try {
-      const parent = await store.addParent({
-        username: String(username),
-        password: String(password),
-        name: String(name),
-        studentId: String(studentId),
-      });
-      res.status(201).json(parent);
-    } catch (err) {
-      if (err instanceof Error && err.message === 'USERNAME_EXISTS') {
-        return res.status(409).json({ error: 'Username sudah dipakai' });
-      }
-      if (err instanceof Error && err.message === 'STUDENT_NOT_FOUND') {
-        return res.status(404).json({ error: 'Siswa tidak ditemukan' });
-      }
-      console.error(err);
-      res.status(500).json({ error: 'Gagal menambah akun orang tua' });
-    }
-  });
-
-  api.delete('/parents/:id', requireAuth('admin'), async (req, res) => {
-    const ok = await store.deleteParent(req.params.id);
-    if (!ok) return res.status(404).json({ error: 'Akun orang tua tidak ditemukan' });
     res.json({ ok: true });
   });
 

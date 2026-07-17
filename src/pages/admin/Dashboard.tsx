@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { id } from 'date-fns/locale';
-import { Users, UserCheck, Clock, RefreshCw, LogOut, Printer, GraduationCap, School, ClipboardList, HeartHandshake } from 'lucide-react';
+import { Users, UserCheck, Clock, RefreshCw, LogOut, Printer, GraduationCap, School, ClipboardList } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import type { AttendanceRecord } from '../../types';
 
@@ -96,18 +96,6 @@ export default function AdminDashboard() {
             <div>
               <h2 className="font-bold text-slate-800 leading-tight">Kelola Guru</h2>
               <p className="text-xs text-slate-500 font-medium">Akun & mapel</p>
-            </div>
-          </Link>
-          <Link
-            to="/admin/parents"
-            className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200 flex items-center gap-3 hover:border-emerald-400 hover:bg-emerald-50 active:scale-[0.98] transition-all"
-          >
-            <div className="w-11 h-11 rounded-xl bg-teal-100 text-teal-600 flex items-center justify-center flex-shrink-0">
-              <HeartHandshake className="w-6 h-6" />
-            </div>
-            <div>
-              <h2 className="font-bold text-slate-800 leading-tight">Akun Ortu</h2>
-              <p className="text-xs text-slate-500 font-medium">Akses wali murid</p>
             </div>
           </Link>
           <Link

@@ -11,6 +11,7 @@ export interface Student {
   nis: string;
   name: string;
   class: string;
+  parentName: string; // nama orang tua/wali — dipakai untuk login orang tua
 }
 
 export interface Teacher {
@@ -22,20 +23,6 @@ export interface Teacher {
 }
 
 export type PublicTeacher = Omit<Teacher, 'passwordHash'>;
-
-export interface Parent {
-  id: string;
-  username: string;
-  passwordHash: string;
-  name: string;
-  studentId: string;
-}
-
-// Untuk daftar di UI admin: identitas ortu + info anaknya.
-export interface PublicParent extends Omit<Parent, 'passwordHash'> {
-  studentName: string;
-  studentClass: string;
-}
 
 export interface Attendance {
   id: string;
@@ -50,30 +37,28 @@ export interface Attendance {
   status: string;
 }
 
-const STUDENT_HEADERS = ['id', 'nis', 'name', 'class'];
+const STUDENT_HEADERS = ['id', 'nis', 'name', 'class', 'parentName'];
 const CLASS_HEADERS = ['name'];
 const TEACHER_HEADERS = ['id', 'username', 'passwordHash', 'name', 'subject'];
-const PARENT_HEADERS = ['id', 'username', 'passwordHash', 'name', 'studentId'];
 const ATT_HEADERS = [
   'id', 'date', 'time', 'studentId', 'studentName', 'class',
   'subject', 'teacherId', 'teacherName', 'status',
 ];
 
 const SAMPLE_STUDENTS: Student[] = [
-  { id: 'S001', nis: '2024001', name: 'Ahmad Fauzi', class: '7' },
-  { id: 'S002', nis: '2024002', name: 'Budi Santoso', class: '7' },
-  { id: 'S003', nis: '2024003', name: 'Citra Kirana', class: '7' },
-  { id: 'S004', nis: '2024004', name: 'Dewi Lestari', class: '7' },
-  { id: 'S005', nis: '2024005', name: 'Eko Prasetyo', class: '8' },
-  { id: 'S006', nis: '2024006', name: 'Fitriani', class: '8' },
-  { id: 'S007', nis: '2024007', name: 'Gilang Ramadhan', class: '8' },
-  { id: 'S008', nis: '2024008', name: 'Haniifah', class: '8' },
+  { id: 'S001', nis: '2024001', name: 'Ahmad Fauzi', class: '7', parentName: 'Hasan Fauzi' },
+  { id: 'S002', nis: '2024002', name: 'Budi Santoso', class: '7', parentName: 'Joko Santoso' },
+  { id: 'S003', nis: '2024003', name: 'Citra Kirana', class: '7', parentName: 'Sri Rahayu' },
+  { id: 'S004', nis: '2024004', name: 'Dewi Lestari', class: '7', parentName: 'Bambang Lestari' },
+  { id: 'S005', nis: '2024005', name: 'Eko Prasetyo', class: '8', parentName: 'Slamet Prasetyo' },
+  { id: 'S006', nis: '2024006', name: 'Fitriani', class: '8', parentName: 'Siti Aminah' },
+  { id: 'S007', nis: '2024007', name: 'Gilang Ramadhan', class: '8', parentName: 'Agus Ramadhan' },
+  { id: 'S008', nis: '2024008', name: 'Haniifah', class: '8', parentName: 'Abdul Karim' },
 ];
 
 let students: Student[] = [];
 let classes: string[] = []; // daftar kelas eksplisit (boleh kosong tanpa siswa)
 let teachers: Teacher[] = [];
-let parents: Parent[] = [];
 let attendance: Attendance[] = [];
 
 export function isPersistent(): boolean {
@@ -98,7 +83,6 @@ export async function initStore(): Promise<void> {
     students = [...SAMPLE_STUDENTS];
     classes = [...new Set(SAMPLE_STUDENTS.map((s) => s.class))];
     teachers = [];
-    parents = [];
     attendance = [];
     return;
   }
@@ -107,7 +91,6 @@ export async function initStore(): Promise<void> {
     { name: 'Students', headers: STUDENT_HEADERS },
     { name: 'Classes', headers: CLASS_HEADERS },
     { name: 'Teachers', headers: TEACHER_HEADERS },
-    { name: 'Parents', headers: PARENT_HEADERS },
     { name: 'Attendance', headers: ATT_HEADERS },
   ]);
 
@@ -116,7 +99,10 @@ export async function initStore(): Promise<void> {
   // tanpa Sheets (in-memory) di atas.
   students = (await sheets.getRows('Students'))
     .filter((r) => r[0])
-    .map((r) => ({ id: r[0], nis: r[1] ?? '', name: r[2] ?? '', class: r[3] ?? '' }));
+    .map((r) => ({
+      id: r[0], nis: r[1] ?? '', name: r[2] ?? '', class: r[3] ?? '',
+      parentName: r[4] ?? '',
+    }));
 
   classes = (await sheets.getRows('Classes'))
     .filter((r) => r[0])
@@ -137,13 +123,6 @@ export async function initStore(): Promise<void> {
     .map((r) => ({
       id: r[0], username: r[1] ?? '', passwordHash: r[2] ?? '',
       name: r[3] ?? '', subject: r[4] ?? '',
-    }));
-
-  parents = (await sheets.getRows('Parents'))
-    .filter((r) => r[0])
-    .map((r) => ({
-      id: r[0], username: r[1] ?? '', passwordHash: r[2] ?? '',
-      name: r[3] ?? '', studentId: r[4] ?? '',
     }));
 
   attendance = (await sheets.getRows('Attendance'))
@@ -210,6 +189,7 @@ export async function addStudent(input: {
   nis: string;
   name: string;
   class: string;
+  parentName: string;
 }): Promise<Student> {
   const nis = input.nis.trim();
   if (nis && findStudentByNis(nis)) throw new Error('NIS_EXISTS');
@@ -219,17 +199,20 @@ export async function addStudent(input: {
     nis,
     name: input.name.trim(),
     class: input.class.trim(),
+    parentName: input.parentName.trim(),
   };
   students.push(student);
   if (sheets.sheetsEnabled) {
-    await sheets.appendRow('Students', [student.id, student.nis, student.name, student.class]);
+    await sheets.appendRow('Students', [
+      student.id, student.nis, student.name, student.class, student.parentName,
+    ]);
   }
   return student;
 }
 
 export async function updateStudent(
   id: string,
-  input: { nis: string; name: string; class: string },
+  input: { nis: string; name: string; class: string; parentName: string },
 ): Promise<Student> {
   const student = students.find((s) => s.id === id);
   if (!student) throw new Error('STUDENT_NOT_FOUND');
@@ -239,9 +222,10 @@ export async function updateStudent(
   student.nis = nis;
   student.name = input.name.trim();
   student.class = input.class.trim();
+  student.parentName = input.parentName.trim();
 
   if (sheets.sheetsEnabled) {
-    const row = [student.id, student.nis, student.name, student.class];
+    const row = [student.id, student.nis, student.name, student.class, student.parentName];
     try {
       await sheets.updateRowByMatch('Students', 0, id, row);
     } catch (err) {
@@ -310,9 +294,8 @@ export function findTeacherById(id: string): Teacher | undefined {
   return teachers.find((t) => t.id === id);
 }
 
-// Username harus unik lintas guru & orang tua agar login tidak ambigu.
 function usernameTaken(username: string): boolean {
-  return Boolean(findTeacherByUsername(username) || findParentByUsername(username));
+  return Boolean(findTeacherByUsername(username));
 }
 
 export async function addTeacher(input: {
@@ -353,62 +336,26 @@ export async function deleteTeacher(id: string): Promise<boolean> {
 
 // ---------- parents ----------
 
-export function findParentByUsername(username: string): Parent | undefined {
-  return parents.find((p) => p.username.toLowerCase() === username.toLowerCase());
-}
-
 export function getStudentById(id: string): Student | undefined {
   return students.find((s) => s.id === id);
 }
 
-export function listParents(): PublicParent[] {
-  return parents.map(({ passwordHash: _ph, ...rest }) => {
-    const student = getStudentById(rest.studentId);
-    return {
-      ...rest,
-      studentName: student?.name ?? '(siswa terhapus)',
-      studentClass: student?.class ?? '-',
-    };
-  });
+/** Normalkan nama untuk pencocokan login ortu: huruf kecil + spasi tunggal. */
+function normalizeName(s: string): string {
+  return s.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
-export async function addParent(input: {
-  username: string;
-  password: string;
-  name: string;
-  studentId: string;
-}): Promise<PublicParent> {
-  if (usernameTaken(input.username)) {
-    throw new Error('USERNAME_EXISTS');
-  }
-  const student = getStudentById(input.studentId);
-  if (!student) throw new Error('STUDENT_NOT_FOUND');
-
-  const parent: Parent = {
-    id: randomId('P'),
-    username: input.username.trim(),
-    passwordHash: hashPassword(input.password),
-    name: input.name.trim(),
-    studentId: input.studentId,
-  };
-  parents.push(parent);
-  if (sheets.sheetsEnabled) {
-    await sheets.appendRow('Parents', [
-      parent.id, parent.username, parent.passwordHash, parent.name, parent.studentId,
-    ]);
-  }
-  const { passwordHash: _ph, ...pub } = parent;
-  return { ...pub, studentName: student.name, studentClass: student.class };
-}
-
-export async function deleteParent(id: string): Promise<boolean> {
-  const idx = parents.findIndex((p) => p.id === id);
-  if (idx === -1) return false;
-  parents.splice(idx, 1);
-  if (sheets.sheetsEnabled) {
-    await sheets.deleteRowByMatch('Parents', 0, id);
-  }
-  return true;
+/**
+ * Login orang tua tanpa akun: cocokkan nama orang tua + nama siswa dengan
+ * data siswa (case-insensitive). Kedua nama harus cocok agar tidak ambigu.
+ */
+export function findStudentByParentLogin(parentName: string, studentName: string): Student | undefined {
+  const pn = normalizeName(parentName);
+  const sn = normalizeName(studentName);
+  if (!pn || !sn) return undefined;
+  return students.find(
+    (s) => s.parentName && normalizeName(s.parentName) === pn && normalizeName(s.name) === sn,
+  );
 }
 
 // ---------- attendance ----------

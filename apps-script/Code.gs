@@ -66,6 +66,10 @@ function handleInit(tabs) {
       if (!sheet) sheet = ss().insertSheet(tab.name);
       if (sheet.getLastRow() === 0 && tab.headers && tab.headers.length) {
         sheet.getRange(1, 1, 1, tab.headers.length).setValues([tab.headers]);
+      } else if (tab.headers && sheet.getLastColumn() < tab.headers.length) {
+        // Header baru ditambahkan aplikasi (mis. kolom parentName):
+        // lengkapi baris header tanpa menyentuh data lama.
+        sheet.getRange(1, 1, 1, tab.headers.length).setValues([tab.headers]);
       }
       sheet
         .getRange(1, 1, sheet.getMaxRows(), sheet.getMaxColumns())

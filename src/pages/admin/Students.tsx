@@ -11,7 +11,7 @@ export default function ManageStudents() {
 
   const [students, setStudents] = useState<Student[]>([]);
   const [classes, setClasses] = useState<string[]>([]);
-  const [form, setForm] = useState({ nis: '', name: '', class: cls });
+  const [form, setForm] = useState({ nis: '', name: '', class: cls, parentName: '' });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -39,14 +39,14 @@ export default function ManageStudents() {
   }, [load]);
 
   const resetForm = () => {
-    setForm({ nis: '', name: '', class: cls });
+    setForm({ nis: '', name: '', class: cls, parentName: '' });
     setEditingId(null);
     setError('');
   };
 
   const startEdit = (s: Student) => {
     setEditingId(s.id);
-    setForm({ nis: s.nis, name: s.name, class: s.class });
+    setForm({ nis: s.nis, name: s.name, class: s.class, parentName: s.parentName ?? '' });
     setError('');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -84,7 +84,7 @@ export default function ManageStudents() {
     }
   };
 
-  const setField = (key: 'nis' | 'name') => (e: ChangeEvent<HTMLInputElement>) =>
+  const setField = (key: 'nis' | 'name' | 'parentName') => (e: ChangeEvent<HTMLInputElement>) =>
     setForm((f) => ({ ...f, [key]: e.target.value }));
 
   return (
@@ -149,6 +149,12 @@ export default function ManageStudents() {
               required
               className="bg-slate-50 border border-slate-200 rounded-xl p-3 outline-none focus:ring-2 focus:ring-emerald-500 font-semibold text-slate-700 text-sm"
             />
+            <input
+              value={form.parentName}
+              onChange={setField('parentName')}
+              placeholder="Nama orang tua / wali (untuk login ortu)"
+              className="bg-slate-50 border border-slate-200 rounded-xl p-3 outline-none focus:ring-2 focus:ring-emerald-500 font-semibold text-slate-700 text-sm sm:col-span-2"
+            />
             <select
               value={form.class}
               onChange={(e) => setForm((f) => ({ ...f, class: e.target.value }))}
@@ -209,6 +215,7 @@ export default function ManageStudents() {
                       <h4 className="font-bold text-slate-800 truncate">{s.name}</h4>
                       <p className="text-xs text-slate-500 font-medium mt-0.5">
                         NIS {s.nis || '-'}
+                        {s.parentName ? ` • Ortu: ${s.parentName}` : ''}
                       </p>
                     </div>
                   </div>

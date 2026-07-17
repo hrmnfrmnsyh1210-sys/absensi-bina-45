@@ -3,6 +3,7 @@ export interface Student {
   nis: string;
   name: string;
   class: string;
+  parentName: string;
 }
 
 export interface Teacher {
@@ -37,15 +38,6 @@ export interface RosterResponse {
   total: number;
   present: number;
   entries: RosterEntry[];
-}
-
-export interface Parent {
-  id: string;
-  username: string;
-  name: string;
-  studentId: string;
-  studentName: string;
-  studentClass: string;
 }
 
 export type Role = 'admin' | 'teacher' | 'parent';
